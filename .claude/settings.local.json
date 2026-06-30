@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1)",
+      "Bash(npm init *)",
+      "Bash(npm i *)",
+      "Bash(node effects.mjs)",
+      "Bash(pkill -f \"http.server 4599\")",
+      "Bash(pkill -f \"serve@14\")",
+      "Bash(pkill -f \"http.server 8099\")"
+    ]
+  }
+}

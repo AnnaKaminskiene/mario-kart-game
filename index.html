@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Collage Kart — Mario Kart-style Racer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%8E%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- ===== HUD (during race) ===== -->
+  <div id="hud" class="hidden">
+    <div id="hud-top-left">
+      <div id="position-display"><span id="position-ord">1st</span> <span class="hud-sub">/ 4</span></div>
+      <div id="lap-display">LAP <span id="lap-num">1</span><span class="hud-sub">/<span id="lap-total">3</span></span></div>
+    </div>
+    <div id="hud-top-center">
+      <div id="timer-display">2:30</div>
+    </div>
+    <div id="hud-top-right">
+      <div id="powerup-display" class="hidden">
+        <span id="powerup-icon">⚡</span>
+        <span id="powerup-label">BOOST</span>
+        <span id="powerup-time">5.0</span>
+      </div>
+    </div>
+    <div id="hud-bottom-left">
+      <div id="theme-display">BERLIN · <span id="mode-display">GOOD</span></div>
+    </div>
+    <div id="hud-bottom-right">
+      <div id="speed-display"><span id="speed-num">0</span> <span class="hud-sub">km/h</span></div>
+      <div id="drift-meter"><div id="drift-fill"></div></div>
+    </div>
+    <div id="center-banner" class="hidden"></div>
+  </div>
+
+  <!-- ===== START SCREEN ===== -->
+  <div id="start-screen" class="overlay">
+    <div class="panel">
+      <h1>COLLAGE&nbsp;KART</h1>
+      <p class="tagline">Race a kart made of currywurst through a shifting collage of cities.</p>
+
+      <div class="field">
+        <label>Theme</label>
+        <div id="theme-picker" class="picker"></div>
+      </div>
+
+      <div class="controls-help">
+        <strong>Controls</strong>
+        <ul>
+          <li><kbd>W</kbd>/<kbd>↑</kbd> accelerate · <kbd>S</kbd>/<kbd>↓</kbd> brake/reverse</li>
+          <li><kbd>A</kbd><kbd>D</kbd>/<kbd>←</kbd><kbd>→</kbd> steer</li>
+          <li><kbd>Space</kbd> drift (hold while turning, release for a boost)</li>
+        </ul>
+      </div>
+
+      <button id="start-btn" class="big-btn">START RACE</button>
+      <p class="hint">Only you can eat power-ups and warp the world. Beat the 2:30 clock.</p>
+    </div>
+  </div>
+
+  <!-- ===== COUNTDOWN ===== -->
+  <div id="countdown" class="overlay hidden"><span id="countdown-num">3</span></div>
+
+  <!-- ===== RESULTS SCREEN ===== -->
+  <div id="results-screen" class="overlay hidden">
+    <div class="panel">
+      <h1 id="results-title">FINISH!</h1>
+      <div id="winner-banner"></div>
+      <table id="results-table">
+        <thead>
+          <tr><th>#</th><th>Racer</th><th>Time / Laps</th><th>Pts</th></tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+      <div id="cumulative-box">
+        <strong>Career points</strong>
+        <div id="cumulative-list"></div>
+      </div>
+      <div class="btn-row">
+        <button id="again-btn" class="big-btn">PLAY AGAIN</button>
+        <button id="change-theme-btn" class="big-btn secondary">CHANGE THEME</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="audio-note" class="hidden">🔇 click to enable sound</div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

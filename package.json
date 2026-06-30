@@ -1,0 +1,11 @@
+{
+  "name": "collage-kart",
+  "version": "1.0.0",
+  "description": "A Mario Kart-style browser racer through a shifting collage of cities (Berlin, Amsterdam, Vilnius, Vinted).",
+  "type": "module",
+  "scripts": {
+    "dev": "npx serve .",
+    "start": "npx serve ."
+  },
+  "license": "MIT"
+}
