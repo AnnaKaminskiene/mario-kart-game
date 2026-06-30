@@ -135,7 +135,7 @@ export class Pickups {
         }
         // green (good) PORTAL — big colored hollow ring you can see through
         const c = 0x33ff88;
-        const R = 3.4; // ~2x the old portal — bigger & more visible
+        const R = 8.0; // spans the full 16-unit road width — edge to edge
         const ring = new THREE.Mesh(new THREE.TorusGeometry(R, 0.4, 16, 36), m(c, { emissiveIntensity: 0.95 }));
         g.add(ring);
         // faint transparent membrane so the interior is hollow / see-through
