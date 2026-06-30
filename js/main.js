@@ -199,7 +199,7 @@ class Game {
         Audio.sfxSlowmo();
         Audio.setMusicMode('slowmo');
         this.pickups.clearProjectiles();
-        this.ui.banner('🍁 SLOW-MO — invincible', 1800);
+        this.ui.banner('✨ Look around,\nSavour the moment\nTime is slowing\nFor all tournament ✨ ', 3500);
 
         // 1. full-screen white flash
         let flash = document.getElementById('flash-overlay');
@@ -317,7 +317,7 @@ class Game {
     const position = standings.indexOf(this.player) + 1;
 
     let powerup = null;
-    if (this.slowMoTimer > 0) powerup = { icon: '🍄', label: 'SLOW-MO', time: this.slowMoTimer };
+    if (this.slowMoTimer > 0) powerup = { icon: '🌿', label: 'RELAX MODE', time: this.slowMoTimer };
     else if (this.player.boostTimer > 0) powerup = { icon: '⚡', label: 'BOOST', time: this.player.boostTimer };
 
     this.ui.updateHUD({
