@@ -225,6 +225,34 @@ export class Environment {
       }
     }
 
+    // ---- Vilnius only: keep the Šakotis landmarks from overlapping other objects ----
+    // The landmark loop only clears the track, so the (large) Šakotis can sit on top of
+    // other landmarks/features. Nudge each flagged Šakotis out of any object it intersects
+    // — and off the track — iteratively. Runs after landmarks/medium/small are all placed.
+    if (themeKey === 'vilnius') {
+      const _b = new THREE.Box3(), _c = new THREE.Vector3(), _sz = new THREE.Vector3();
+      const foot = (o) => { _b.setFromObject(o); _b.getCenter(_c); _b.getSize(_sz); return { x: _c.x, z: _c.z, r: 0.5 * Math.hypot(_sz.x, _sz.z) }; };
+      const sakotis = this.group.children.filter((o) => o.userData?.isSakotis);
+      const obstacles = this.group.children.filter((o) => !o.userData?.isSakotis).map(foot);
+      const GAP = 2;
+      for (const cake of sakotis) {
+        for (let iter = 0; iter < 40; iter++) {
+          this._ensureClear(cake, 4);                    // keep off the racing path first
+          const f = foot(cake);
+          let worstOv = 0, wdx = 0, wdz = 0, wd = 1;
+          for (const o of obstacles) {
+            const dx = f.x - o.x, dz = f.z - o.z, d = Math.hypot(dx, dz);
+            const ov = (f.r + o.r + GAP) - d;
+            if (ov > worstOv) { worstOv = ov; wdx = dx; wdz = dz; wd = d || 1; }
+          }
+          if (worstOv <= 0) break;                       // clear of every object
+          cake.position.x += (wdx / wd) * (worstOv + 0.5); // push straight away from worst overlap
+          cake.position.z += (wdz / wd) * (worstOv + 0.5);
+        }
+        obstacles.push(foot(cake));                      // later Šakotis also avoids this one
+      }
+    }
+
     // ---- Vilnius only: one giant White Stork standing on the field, off the road ----
     if (themeKey === 'vilnius') {
       const stork = createWhiteStork(THREE, { size: 4.95, seed: 2 }); // 10% smaller (was 5.5)
@@ -948,6 +976,7 @@ LANDMARKS.vilnius = [
     const box = new THREE.Box3().setFromObject(cake);
     cake.position.y -= box.min.y;                       // rest the board flat on the ground
     g.add(cake);
+    g.userData.isSakotis = true;                        // flagged for the de-overlap pass in build()
   },
   // Second Šakotis — 25% smaller than the first, placed elsewhere along the road
   ({ g }) => {
@@ -956,6 +985,7 @@ LANDMARKS.vilnius = [
     const box = new THREE.Box3().setFromObject(cake);
     cake.position.y -= box.min.y;                       // rest the board flat on the ground
     g.add(cake);
+    g.userData.isSakotis = true;                        // flagged for the de-overlap pass in build()
   },
 ];
 
