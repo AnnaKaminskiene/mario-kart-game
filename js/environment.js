@@ -106,25 +106,43 @@ export class Environment {
       this.group.add(small);
     }
 
-    // ---- Berlin only: 100 strawberries scattered randomly across the field ----
+    // ---- Berlin only: Ampelmann + 100 strawberries scattered across the field ----
     if (themeKey === 'berlin') {
-      for (let i = 0; i < 100; i++) {
-        const straw = createStrawberry(THREE, { size: 3, seed: i + 1 }); // 3× the natural size
-        const t = Math.random();
-        const side = Math.random() < 0.5 ? -1 : 1;
-        const dist = 6 + Math.random() * 42;             // spread across the field band
-        straw.position.copy(this._outside(t, side, dist, 0)); // group origin (y=0) is the bottom tip → sits on ground
-        straw.rotation.y = Math.random() * Math.PI * 2;
-        this._ensureClear(straw, 2);                     // keep off the racing path
-        this.group.add(straw);
-      }
-
-      // one big Ampelmann (green walking man) standing near the road
-      const amp = buildAmpelmann('walk', 10.64); // 5% smaller (was 11.2)
-      amp.position.copy(this._outside(0.3, 1, 6, 0));    // near the track on the field
-      amp.rotation.y = -Math.PI / 2;                     // face the racing line
+      // one big Ampelmann (green walking man) standing near the road — placed first
+      // so the strawberries below treat it as an obstacle too.
+      const amp = buildAmpelmann('walk', 14.896); // 40% bigger (was 10.64)
+      amp.position.copy(this._outside(0.3, -1, 6, 0));   // other side of the road, near the track
+      amp.rotation.y = Math.PI / 2;                      // face the racing line
       this._ensureClear(amp, 3);                         // keep off the racing path
       this.group.add(amp);
+
+      // Horizontal footprint (center + radius) of every object already placed,
+      // so strawberries can avoid landing on landmarks/features/each other.
+      const _box = new THREE.Box3(), _c = new THREE.Vector3(), _s = new THREE.Vector3();
+      const footprint = (obj) => {
+        _box.setFromObject(obj); _box.getCenter(_c); _box.getSize(_s);
+        return { x: _c.x, z: _c.z, r: 0.5 * Math.hypot(_s.x, _s.z) };
+      };
+      const placed = this.group.children.map(footprint);
+
+      const GAP = 1;                                     // extra breathing room between footprints
+      let strawR = 0;                                    // strawberry footprint radius (constant per berry)
+      for (let i = 0; i < 100; i++) {
+        const straw = createStrawberry(THREE, { size: 3, seed: i + 1 }); // 3× the natural size
+        if (i === 0) strawR = footprint(straw).r;        // measured once at the origin
+        straw.rotation.y = Math.random() * Math.PI * 2;
+        let ok = false;
+        for (let attempt = 0; attempt < 40 && !ok; attempt++) {
+          const t = Math.random();
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const dist = 6 + Math.random() * 42;           // spread across the field band
+          straw.position.copy(this._outside(t, side, dist, 0)); // origin (y=0) is the bottom tip → sits on ground
+          this._ensureClear(straw, 2);                   // keep off the racing path
+          ok = placed.every((p) => Math.hypot(straw.position.x - p.x, straw.position.z - p.z) >= p.r + strawR + GAP);
+        }
+        placed.push({ x: straw.position.x, z: straw.position.z, r: strawR });
+        this.group.add(straw);
+      }
     }
 
     // ground & sky handled by Game via palette
