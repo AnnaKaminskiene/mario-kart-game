@@ -6,6 +6,7 @@ import { AMPELMANN } from './ampelmann.js';
 import { createTulip } from './tulip.js';
 import { createGediminasTower } from './gediminas-tower.js';
 import { createWhiteStork } from './white-stork.js';
+import { makeLake } from './SoupLakeScene.js';
 
 // ============================================================
 //  Environment — themed scenery scattered around the fixed track.
@@ -26,6 +27,8 @@ export class Environment {
     this.group = new THREE.Group();
     scene.add(this.group);
     this.spinners = [];   // windmill sails, döner spits — rotated each frame
+    this.lakes = [];      // animated soup lakes — rippled each frame
+    this._elapsed = 0;    // accumulated time for lake ripple animation
   }
 
   // pos just outside the road at param t, distance d beyond the curb
@@ -229,6 +232,29 @@ export class Environment {
       stork.rotation.y = 0;                                          // turn to face the track
       this._ensureClear(stork, 4);                                   // keep off the racing path
       this.group.add(stork);
+
+      // 2 Šaltibarščiai lakes — just the rippling soup-blob from the SoupLake model
+      // (its full landscape ships a sky dome + ground that would clash with ours).
+      //
+      // PERF: both lakes are the SAME deterministic blob (fixed seeds), differing only
+      // by transform. So build ONE (one 512² swirl texture, one geometry) and share its
+      // geometry+material across both meshes; the ripple animates that single geometry
+      // once per frame instead of recomputing normals + re-uploading buffers twice.
+      const lakeSpots = [
+        { t: 0.18, side:  1, dist: 60, scale: 0.5,  rot: 0.3 },
+        { t: 0.68, side: -1, dist: 64, scale: 0.55, rot: 2.1 },
+      ];
+      const lakeProto = makeLake();                                  // built once (geometry + texture)
+      lakeSpots.forEach((sp, i) => {
+        const lake = i === 0 ? lakeProto
+                             : new THREE.Mesh(lakeProto.geometry, lakeProto.material); // share buffers
+        lake.scale.setScalar(sp.scale);
+        const p = this._outside(sp.t, sp.side, sp.dist, 0.15);       // flat pool just above ground
+        lake.position.set(p.x, 0.15, p.z);
+        lake.rotation.y = sp.rot;
+        this.group.add(lake);
+      });
+      this.lakes.push(lakeProto);                                    // animate the shared geometry once/frame
     }
 
     // ---- Berlin only: Ampelmann + 100 strawberries scattered across the field ----
@@ -277,6 +303,10 @@ export class Environment {
   // spin windmill sails / döner spits — called every frame by the game loop
   update(dt) {
     for (const s of this.spinners) s.rotation[s.userData.spinAxis] += s.userData.spinSpeed * dt;
+    if (this.lakes.length) {
+      this._elapsed += dt;
+      for (const lk of this.lakes) lk.userData.animate(this._elapsed);
+    }
   }
 
   // ---- depth band dispatch ------------------------------------------------
@@ -315,6 +345,7 @@ export class Environment {
 
   clear() {
     this.spinners = [];
+    this.lakes = [];
     while (this.group.children.length) {
       const c = this.group.children.pop();
       c.traverse?.((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
