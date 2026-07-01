@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { THEMES } from './config.js';
 import { createSakotis } from './sakotis.js';
 import { createStrawberry } from './strawberry.js';
+import { AMPELMANN } from './ampelmann.js';
 
 // ============================================================
 //  Environment — themed scenery scattered around the fixed track.
@@ -105,16 +106,41 @@ export class Environment {
       this.group.add(small);
     }
 
-    // ---- Berlin only: 100 strawberries scattered randomly across the field ----
+    // ---- Berlin only: Ampelmann + 100 strawberries scattered across the field ----
     if (themeKey === 'berlin') {
+      // one big Ampelmann (green walking man) standing near the road — placed first
+      // so the strawberries below treat it as an obstacle too.
+      const amp = buildAmpelmann('walk', 14.896); // 40% bigger (was 10.64)
+      amp.position.copy(this._outside(0.3, -1, 6, 0));   // other side of the road, near the track
+      amp.rotation.y = Math.PI / 2;                      // face the racing line
+      this._ensureClear(amp, 3);                         // keep off the racing path
+      this.group.add(amp);
+
+      // Horizontal footprint (center + radius) of every object already placed,
+      // so strawberries can avoid landing on landmarks/features/each other.
+      const _box = new THREE.Box3(), _c = new THREE.Vector3(), _s = new THREE.Vector3();
+      const footprint = (obj) => {
+        _box.setFromObject(obj); _box.getCenter(_c); _box.getSize(_s);
+        return { x: _c.x, z: _c.z, r: 0.5 * Math.hypot(_s.x, _s.z) };
+      };
+      const placed = this.group.children.map(footprint);
+
+      const GAP = 1;                                     // extra breathing room between footprints
+      let strawR = 0;                                    // strawberry footprint radius (constant per berry)
       for (let i = 0; i < 100; i++) {
         const straw = createStrawberry(THREE, { size: 3, seed: i + 1 }); // 3× the natural size
-        const t = Math.random();
-        const side = Math.random() < 0.5 ? -1 : 1;
-        const dist = 6 + Math.random() * 42;             // spread across the field band
-        straw.position.copy(this._outside(t, side, dist, 0)); // group origin (y=0) is the bottom tip → sits on ground
+        if (i === 0) strawR = footprint(straw).r;        // measured once at the origin
         straw.rotation.y = Math.random() * Math.PI * 2;
-        this._ensureClear(straw, 2);                     // keep off the racing path
+        let ok = false;
+        for (let attempt = 0; attempt < 40 && !ok; attempt++) {
+          const t = Math.random();
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const dist = 6 + Math.random() * 42;           // spread across the field band
+          straw.position.copy(this._outside(t, side, dist, 0)); // origin (y=0) is the bottom tip → sits on ground
+          this._ensureClear(straw, 2);                   // keep off the racing path
+          ok = placed.every((p) => Math.hypot(straw.position.x - p.x, straw.position.z - p.z) >= p.r + strawR + GAP);
+        }
+        placed.push({ x: straw.position.x, z: straw.position.z, r: strawR });
         this.group.add(straw);
       }
     }
@@ -258,6 +284,37 @@ export function buildHighHeelShoe() {
   group.add(toe);
 
   group.scale.setScalar(1.2); // 1.2 units overall height
+  return group;
+}
+
+// Ampelmann — extrude the traced SVG silhouette into an upright 3D figure.
+// The path 'd' is "M x,y x,y … Z": implicit line-tos, so it's just a polygon.
+// Fresh geometry/material per call (clear() disposes them on theme swap).
+function buildAmpelmann(which = 'walk', targetHeight = 16) {
+  const fig = AMPELMANN[which];
+  const shape = new THREE.Shape();
+  const tokens = fig.d.replace(/^M/, '').replace(/Z$/i, '').trim().split(/\s+/);
+  tokens.forEach((tok, i) => {
+    const [px, py] = tok.split(',').map(Number);
+    const x = px, y = fig.height - py;      // flip SVG's y-down into y-up so it stands upright
+    if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+  });
+  shape.closePath();
+
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 26, bevelEnabled: false });
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); // center x/z, feet at y=0
+
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({
+      color: parseInt(fig.color.slice(1), 16), roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
+    })
+  );
+  const group = new THREE.Group();
+  group.add(mesh);
+  group.scale.setScalar(targetHeight / fig.height); // feet stay at y=0 under uniform scale
   return group;
 }
 
