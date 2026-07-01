@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { THEMES } from './config.js';
+import { createSakotis } from './sakotis.js';
 
 // ============================================================
 //  Environment — themed scenery scattered around the fixed track.
@@ -679,6 +680,14 @@ LANDMARKS.vilnius = [
     }
     add(Cyl(3.5, 3.5, 0.7, 24), glaze, 0, y + 0.2, 0);                  // glaze cap
     for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; add(Cap(0.3, 1.2), glaze, Math.cos(a) * 3.2, y - 0.4, Math.sin(a) * 3.2); } // drips
+  },
+  // Šakotis (Lithuanian tree cake) — huge procedural roadside decoration
+  ({ g }) => {
+    const cake = createSakotis(THREE, { height: 6.5, seed: 7 });
+    cake.scale.setScalar(4.8);                          // scale up to read as a skyline landmark (~31u tall)
+    const box = new THREE.Box3().setFromObject(cake);
+    cake.position.y -= box.min.y;                       // rest the board flat on the ground
+    g.add(cake);
   },
 ];
 
