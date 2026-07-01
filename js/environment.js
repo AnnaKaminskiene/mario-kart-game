@@ -4,6 +4,7 @@ import { createSakotis } from './sakotis.js';
 import { createStrawberry } from './strawberry.js';
 import { AMPELMANN } from './ampelmann.js';
 import { createTulip } from './tulip.js';
+import { createGediminasTower } from './gediminas-tower.js';
 
 // ============================================================
 //  Environment — themed scenery scattered around the fixed track.
@@ -832,14 +833,12 @@ SMALL.amsterdam = [
 //  VILNIUS
 // ============================================================
 LANDMARKS.vilnius = [
-  // 1. Gediminas Tower — red-brick tower on a green hill, flag on top
-  ({ add, bad }) => {
-    add(Cone(10, 8, 18), grey(bad, 0x6f9a4a), 0, 4, 0);         // hill
-    add(Cyl(3.5, 4, 13, 8), grey(bad, 0xb5503a), 0, 14.5, 0);   // octagonal tower
-    for (let c = 0; c < 8; c++) { const a = c / 8 * Math.PI * 2; add(Box(0.8, 1.2, 0.8), grey(bad, 0x8a3a2a), Math.cos(a) * 3.7, 21.4, Math.sin(a) * 3.7); } // crenellations
-    add(Cyl(0.08, 0.08, 3, 6), 0x555, 0, 23.5, 0);              // flagpole
-    add(Box(1.4, 0.9, 0.05), grey(bad, 0xfdb913), 0.7, 24.4, 0);
-    add(Box(1.4, 0.9, 0.05), grey(bad, 0x006a44), 0.7, 23.5, 0);
+  // 1. Gediminas Tower — updated procedural model, seated on the green hill
+  ({ g, add, bad }) => {
+    add(Cone(10, 8, 18), grey(bad, 0x6f9a4a), 0, 4, 0);         // green Gediminas hill (kept)
+    const tower = createGediminasTower(THREE, { size: 2.53, seed: 3 }); // 15% bigger (was 2.2)
+    tower.position.y = 2;                                       // seat the plinth into the hilltop
+    g.add(tower);
   },
   // 2. Vilnius Cathedral — white neoclassical block + freestanding belfry
   ({ add, bad, accent }) => {
