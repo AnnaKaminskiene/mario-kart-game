@@ -3,6 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { THEMES } from './config.js';
 import { createSakotis } from './sakotis.js';
 import { createStrawberry } from './strawberry.js';
+import { AMPELMANN } from './ampelmann.js';
+import { createTulip } from './tulip.js';
 
 // Themed GLB landmark models, replacing the old procedural pretzel/shoe geometry.
 const GLB_MODELS = {
@@ -219,16 +221,154 @@ export class Environment {
       this.group.add(small);
     }
 
-    // ---- Berlin only: 100 strawberries scattered randomly across the field ----
+    // ---- Amsterdam only: fill the open ground with a grid of tulips ----
+    // ~4-unit grid across the track's bounding box (+margin); a cell becomes a
+    // tulip only if it's at least CLEAR units from the track centerline, so the
+    // road/curbs stay clear.
+    //
+    // PERF: ~4k tulips as individual groups = ~41k draw calls (very slow). Instead
+    // we build a few PROTOTYPE tulips, merge each one's parts by material, and draw
+    // the whole field with InstancedMesh — ~24 draw calls total, 8 tulip builds.
+    if (themeKey === 'amsterdam') {
+      const SPACING = 4, CLEAR = 12, MARGIN = 15, CLEAR2 = CLEAR * CLEAR;
+      const pts = this.track._pts;
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+      }
+
+      // 0) place 4 extra Dutch canal houses (landmark #3) at new spots on the field,
+      //    kept off the road, recording each footprint so tulips beneath are removed.
+      const houseSpots = [
+        { t: 0.15, side:  1, dist: 22 },
+        { t: 0.40, side: -1, dist: 26 },
+        { t: 0.66, side:  1, dist: 30 },
+        { t: 0.88, side: -1, dist: 24 },
+      ];
+      const houseFP = [];
+      const _hb = new THREE.Box3(), _hc = new THREE.Vector3(), _hs = new THREE.Vector3();
+      for (const sp of houseSpots) {
+        const ctx = this._ctx('amsterdam', mode, m, 3);
+        LANDMARKS.amsterdam[3](ctx);                   // the Dutch canal houses builder
+        const house = ctx.g;
+        house.position.copy(this._outside(sp.t, sp.side, sp.dist, 0));
+        house.rotation.y = sp.side > 0 ? Math.PI : 0;  // face the track
+        this._ensureClear(house, 4);                   // keep off the road
+        this.group.add(house);
+        _hb.setFromObject(house); _hb.getCenter(_hc); _hb.getSize(_hs);
+        houseFP.push({ x: _hc.x, z: _hc.z, r: 0.5 * Math.hypot(_hs.x, _hs.z) + 1 });
+      }
+
+      // 1) collect the clear grid cells (with a per-tulip facing)
+      const placements = [];
+      for (let x = minX - MARGIN; x <= maxX + MARGIN; x += SPACING) {
+        for (let z = minZ - MARGIN; z <= maxZ + MARGIN; z += SPACING) {
+          let dmin2 = Infinity;
+          for (const p of pts) {
+            const dx = x - p.x, dz = z - p.z, d = dx * dx + dz * dz;
+            if (d < dmin2) dmin2 = d;
+          }
+          if (dmin2 < CLEAR2) continue;                // too close to the track — leave open
+          // skip cells sitting under one of the newly placed canal houses
+          let underHouse = false;
+          for (const h of houseFP) {
+            const dx = x - h.x, dz = z - h.z;
+            if (dx * dx + dz * dz < h.r * h.r) { underHouse = true; break; }
+          }
+          if (underHouse) continue;
+          placements.push({ x, z, ry: Math.random() * Math.PI * 2 });
+        }
+      }
+
+      if (placements.length) {
+        // 2) build PROTO prototype tulips and merge each into petal / leaf / stem geometry
+        const PROTO = Math.min(8, placements.length);
+        const petalMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.0, side: THREE.DoubleSide });
+        const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.0, side: THREE.DoubleSide });
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x6e8a3c, roughness: 0.7, metalness: 0.0 });
+        const protoGeo = [];
+        for (let p = 0; p < PROTO; p++) {
+          const t = createTulip(THREE, { size: 0.75, seed: p + 1 }); // 25% smaller
+          const bloom = t.userData.bloom;
+          const petalGeos = bloom.children.map((m) => m.geometry);
+          const leafGeos = [], stemGeos = [];
+          for (const child of t.children) {
+            if (child === bloom) continue;
+            (child.geometry.attributes.color ? leafGeos : stemGeos).push(child.geometry);
+          }
+          protoGeo.push({
+            petal: mergeColoredGeoms(THREE, petalGeos),
+            leaf: mergeColoredGeoms(THREE, leafGeos),
+            stem: stemGeos[0],
+          });
+        }
+
+        // 3) count instances per prototype (round-robin assignment for variety)
+        const counts = new Array(PROTO).fill(0);
+        placements.forEach((pl, i) => { pl.proto = i % PROTO; counts[pl.proto]++; });
+
+        // 4) one InstancedMesh per prototype × part; fill per-tulip transforms
+        const inst = [];
+        for (let p = 0; p < PROTO; p++) {
+          inst.push({
+            petal: new THREE.InstancedMesh(protoGeo[p].petal, petalMat, counts[p]),
+            leaf: new THREE.InstancedMesh(protoGeo[p].leaf, leafMat, counts[p]),
+            stem: new THREE.InstancedMesh(protoGeo[p].stem, stemMat, counts[p]),
+          });
+        }
+        const mtx = new THREE.Matrix4(), q = new THREE.Quaternion();
+        const up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), posv = new THREE.Vector3();
+        const fill = new Array(PROTO).fill(0);
+        for (const pl of placements) {
+          q.setFromAxisAngle(up, pl.ry);
+          mtx.compose(posv.set(pl.x, 0, pl.z), q, one); // origin (y=0) is the stem base → on ground
+          const im = inst[pl.proto], k = fill[pl.proto]++;
+          im.petal.setMatrixAt(k, mtx); im.leaf.setMatrixAt(k, mtx); im.stem.setMatrixAt(k, mtx);
+        }
+        for (const im of inst) for (const key of ['petal', 'leaf', 'stem']) {
+          im[key].instanceMatrix.needsUpdate = true;
+          im[key].frustumCulled = false;   // bounds are per-prototype, not per-field → don't cull the batch
+          this.group.add(im[key]);
+        }
+      }
+    }
+
+    // ---- Berlin only: Ampelmann + 100 strawberries scattered across the field ----
     if (themeKey === 'berlin') {
+      // one big Ampelmann (green walking man) standing near the road — placed first
+      // so the strawberries below treat it as an obstacle too.
+      const amp = buildAmpelmann('walk', 14.896); // 40% bigger (was 10.64)
+      amp.position.copy(this._outside(0.3, -1, 6, 0));   // other side of the road, near the track
+      amp.rotation.y = Math.PI / 2;                      // face the racing line
+      this._ensureClear(amp, 3);                         // keep off the racing path
+      this.group.add(amp);
+
+      // Horizontal footprint (center + radius) of every object already placed,
+      // so strawberries can avoid landing on landmarks/features/each other.
+      const _box = new THREE.Box3(), _c = new THREE.Vector3(), _s = new THREE.Vector3();
+      const footprint = (obj) => {
+        _box.setFromObject(obj); _box.getCenter(_c); _box.getSize(_s);
+        return { x: _c.x, z: _c.z, r: 0.5 * Math.hypot(_s.x, _s.z) };
+      };
+      const placed = this.group.children.map(footprint);
+
+      const GAP = 1;                                     // extra breathing room between footprints
+      let strawR = 0;                                    // strawberry footprint radius (constant per berry)
       for (let i = 0; i < 100; i++) {
         const straw = createStrawberry(THREE, { size: 3, seed: i + 1 }); // 3× the natural size
-        const t = Math.random();
-        const side = Math.random() < 0.5 ? -1 : 1;
-        const dist = 6 + Math.random() * 42;             // spread across the field band
-        straw.position.copy(this._outside(t, side, dist, 0)); // group origin (y=0) is the bottom tip → sits on ground
+        if (i === 0) strawR = footprint(straw).r;        // measured once at the origin
         straw.rotation.y = Math.random() * Math.PI * 2;
-        this._ensureClear(straw, 2);                     // keep off the racing path
+        let ok = false;
+        for (let attempt = 0; attempt < 40 && !ok; attempt++) {
+          const t = Math.random();
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const dist = 6 + Math.random() * 42;           // spread across the field band
+          straw.position.copy(this._outside(t, side, dist, 0)); // origin (y=0) is the bottom tip → sits on ground
+          this._ensureClear(straw, 2);                   // keep off the racing path
+          ok = placed.every((p) => Math.hypot(straw.position.x - p.x, straw.position.z - p.z) >= p.r + strawR + GAP);
+        }
+        placed.push({ x: straw.position.x, z: straw.position.z, r: strawR });
         this.group.add(straw);
       }
     }
@@ -323,6 +463,69 @@ function garment(add, x, railY, color, type) {
     add(Box(1.6, 1.9, 0.4), color, x, railY - 1.5, 0);                              // body
     for (const sx of [-1, 1]) { const s = add(Box(0.55, 1.7, 0.4), color, x + sx, railY - 1.2, 0); s.rotation.z = sx * 0.55; } // sleeves
   }
+}
+
+// ============================================================
+//  Ampelmann figure + colored-geometry merge helpers
+// ============================================================
+
+// Ampelmann — extrude the traced SVG silhouette into an upright 3D figure.
+// The path 'd' is "M x,y x,y … Z": implicit line-tos, so it's just a polygon.
+// Fresh geometry/material per call (clear() disposes them on theme swap).
+function buildAmpelmann(which = 'walk', targetHeight = 16) {
+  const fig = AMPELMANN[which];
+  const shape = new THREE.Shape();
+  const tokens = fig.d.replace(/^M/, '').replace(/Z$/i, '').trim().split(/\s+/);
+  tokens.forEach((tok, i) => {
+    const [px, py] = tok.split(',').map(Number);
+    const x = px, y = fig.height - py;      // flip SVG's y-down into y-up so it stands upright
+    if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+  });
+  shape.closePath();
+
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 26, bevelEnabled: false });
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2); // center x/z, feet at y=0
+
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({
+      color: parseInt(fig.color.slice(1), 16), roughness: 0.55, metalness: 0.05, side: THREE.DoubleSide,
+    })
+  );
+  const group = new THREE.Group();
+  group.add(mesh);
+  group.scale.setScalar(targetHeight / fig.height); // feet stay at y=0 under uniform scale
+  return group;
+}
+
+// Merge several indexed BufferGeometries (position/normal/color) into one.
+// Geometries without a color attribute default to white so the buffer stays uniform.
+function mergeColoredGeoms(THREE, geos) {
+  let vtot = 0, itot = 0;
+  for (const g of geos) {
+    vtot += g.attributes.position.count;
+    itot += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const pos = new Float32Array(vtot * 3), nrm = new Float32Array(vtot * 3), col = new Float32Array(vtot * 3);
+  const idx = new Uint32Array(itot);
+  let vo = 0, io = 0;
+  for (const g of geos) {
+    const p = g.attributes.position, n = g.attributes.normal, c = g.attributes.color;
+    pos.set(p.array, vo * 3);
+    if (n) nrm.set(n.array, vo * 3);
+    if (c) col.set(c.array, vo * 3); else col.fill(1, vo * 3, vo * 3 + p.count * 3);
+    if (g.index) { const gi = g.index.array; for (let k = 0; k < gi.length; k++) idx[io + k] = gi[k] + vo; io += gi.length; }
+    else { for (let k = 0; k < p.count; k++) idx[io + k] = vo + k; io += p.count; }
+    vo += p.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
 }
 
 // ============================================================
@@ -487,6 +690,7 @@ SMALL.berlin = [
 LANDMARKS.amsterdam = [
   // 1. Windmill (Kinderdijk) — massive, rotating sails visible
   ({ g, add, m, bad, spinners }) => {
+    g.scale.setScalar(1.1); // 10% bigger (position unchanged)
     add(Cyl(3, 4.6, 16, 14), grey(bad, 0x9c6b3f), 0, 8, 0);     // tapered tower
     add(Cone(5, 5, 14), grey(bad, 0x5a3a26), 0, 18.5, 0);       // cap
     add(Tor(4.7, 0.4, Math.PI * 2), grey(bad, 0x6b4a30), 0, 13, 0); // balcony ring
@@ -517,7 +721,8 @@ LANDMARKS.amsterdam = [
     const hook = add(Box(1.4, 0.3, 0.3), trim, 0, 17.6, 3.4);   // gable hoisting beam
   },
   // 3. Canal barge — long low boat floating on canal water
-  ({ add, bad, accent }) => {
+  ({ g, add, bad, accent }) => {
+    g.scale.setScalar(2); // 100% bigger (position unchanged)
     water(add, 34, 14);                                         // the canal itself
     add(Box(22, 2.4, 5), grey(bad, 0x2e5d3a), 0, 1.4, 0);       // hull
     add(Box(20, 0.6, 4.4), grey(bad, 0x5a3a26), 0, 2.7, 0);     // deck
@@ -548,7 +753,8 @@ LANDMARKS.amsterdam = [
     }
   },
   // 5. Huge cheese wedge — yellow, holes, dark rind
-  ({ add, bad }) => {
+  ({ g, add, bad }) => {
+    g.scale.setScalar(2.5); // 150% bigger (position unchanged)
     const yellow = grey(bad, 0xf2c200);
     const shape = new THREE.Shape();
     shape.moveTo(0, 0); shape.lineTo(11, 0); shape.lineTo(11, 6.5); shape.closePath();
