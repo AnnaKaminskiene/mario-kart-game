@@ -32,6 +32,7 @@ export class UI {
       cumulativeList: document.getElementById('cumulative-list'),
       againBtn: document.getElementById('again-btn'),
       changeThemeBtn: document.getElementById('change-theme-btn'),
+      exitRaceBtn: document.getElementById('exit-race-btn'),
       // mute toggles live on both the start and results screens — drive them all
       muteMusicBtns: Array.from(document.querySelectorAll('.audio-toggle[data-audio="music"]')),
       muteSfxBtns: Array.from(document.querySelectorAll('.audio-toggle[data-audio="sfx"]')),
@@ -60,6 +61,7 @@ export class UI {
   onStart(cb) { this.el.startBtn.onclick = cb; }
   onAgain(cb) { this.el.againBtn.onclick = cb; }
   onChangeTheme(cb) { this.el.changeThemeBtn.onclick = cb; }
+  onExitRace(cb) { this.el.exitRaceBtn.onclick = cb; }
   onToggleMusic(cb) { this.el.muteMusicBtns.forEach(b => (b.onclick = cb)); }
   onToggleSfx(cb) { this.el.muteSfxBtns.forEach(b => (b.onclick = cb)); }
 

@@ -76,6 +76,7 @@ class Game {
     this.ui.onStart(() => this._startRace(this.ui.selectedTheme));
     this.ui.onAgain(() => this._startRace(this.theme));
     this.ui.onChangeTheme(() => { this.state = 'menu'; this.ui.showStart(); });
+    this.ui.onExitRace(() => this._exitRace());
 
     // mute controls (results modal) — reflect saved prefs, then toggle Audio on click
     this.ui.setAudioState(Audio.musicMuted, Audio.sfxMuted);
@@ -132,6 +133,20 @@ class Game {
       .sort((a, b) => b.total - a.total);
 
     this.ui.showResults(standings, cumulative);
+  }
+
+  // Bail out of a race straight back to theme selection — no results, no modal.
+  _exitRace() {
+    if (this.state !== 'racing' && this.state !== 'countdown') return;
+    this.state = 'menu';
+    Audio.stopMusic();
+    Audio.stopEngine();
+    Audio.setMusicMode('good');
+    // tear down any active slow-mo hallucination loop so the menu scene is clean
+    if (this.halluciTimer) { clearInterval(this.halluciTimer); this.halluciTimer = null; }
+    this.slowMoTimer = 0;
+    this._clearParticles();
+    this.ui.showStart();
   }
 
   _standings() {
