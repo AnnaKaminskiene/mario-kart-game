@@ -42,15 +42,29 @@ export class Pickups {
       }
       case 'theme': {
         // white shining oval portal with iconic object inside
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(2, 0.35, 12, 28), m(0xffffff, { emissiveIntensity: 0.8 }));
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(2, 0.35, 12, 28), m(0xffffff, { emissiveIntensity: 1.8 }));
         ring.scale.set(1, 1.4, 1);
         g.add(ring);
-        const inner = new THREE.Mesh(new THREE.CircleGeometry(1.8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+        const inner = new THREE.Mesh(new THREE.CircleGeometry(1.8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
         inner.scale.set(1, 1.4, 1);
         g.add(inner);
-        const sym = themeSymbol(def.theme);
-        sym.position.z = 0.1;
-        g.add(sym);
+        // strong white halo glow surrounding the portal (additive, larger than the ring)
+        const halo = new THREE.Mesh(
+          new THREE.CircleGeometry(3.2, 32),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+        );
+        halo.scale.set(1, 1.4, 1);
+        halo.position.z = -0.05;
+        g.add(halo);
+        // actual light cast around the portal so it illuminates its surroundings
+        const glowLight = new THREE.PointLight(0xffffff, 3.0, 16, 2);
+        g.add(glowLight);
+        // flag background (with bold centered letter) filling the portal interior
+        const flag = themeFlag(def.theme);
+        flag.scale.set(1, 1.4, 1);
+        flag.position.z = 0.05;
+        g.add(flag);
+        g.scale.setScalar(1.5);
         g.userData.icon = '🌀'; g.userData.spin = 0.6; g.userData.billboard = true;
         break;
       }
@@ -93,7 +107,9 @@ export class Pickups {
     const tnow = performance.now() * 0.001;
     for (const it of this.items) {
       it.mesh.rotation.y += (it.mesh.userData.spin || 1) * dt;
-      it.mesh.position.y = (it.def.type === 'slowmo' ? 1.0 : 1.6) + Math.sin(tnow * 2 + it.def.t * 10) * 0.2;
+      // theme portals are tall (1.5x scaled oval) — raise them so the whole flag clears the ground
+      const baseY = it.def.type === 'slowmo' ? 1.0 : it.def.type === 'theme' ? 4.4 : 1.6;
+      it.mesh.position.y = baseY + Math.sin(tnow * 2 + it.def.t * 10) * 0.2;
       if (it.mesh.userData.billboard && camera) {
         it.mesh.rotation.y = Math.atan2(camera.position.x - it.mesh.position.x, camera.position.z - it.mesh.position.z);
       }
@@ -119,7 +135,10 @@ export class Pickups {
     const hits = [];
     for (const it of this.items) {
       if (!it.active) continue;
-      if (playerKart.pos.distanceTo(it.mesh.position) < it.collectRadius) {
+      // horizontal distance only — portals are raised well above the kart, so y must not count
+      const dx = playerKart.pos.x - it.mesh.position.x;
+      const dz = playerKart.pos.z - it.mesh.position.z;
+      if (Math.hypot(dx, dz) < it.collectRadius) {
         it.active = false;
         it.mesh.visible = false;
         it.respawn = 10; // reappear later for replay value
@@ -165,28 +184,41 @@ export class Pickups {
   }
 }
 
-// small iconic object shown inside a theme portal
-function themeSymbol(theme) {
-  const m = (c) => new THREE.MeshBasicMaterial({ color: c });
-  const g = new THREE.Group();
-  switch (theme) {
-    case 'berlin': {
-      const s = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.3, 2, 8), m(0xc0c8ff)); g.add(s);
-      const b = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 10), m(0xff4b2b)); b.position.y = 0.8; g.add(b);
-      break;
-    }
-    case 'amsterdam': {
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.18, 16), m(0xe8b04b)); p.rotation.x = 0.5; g.add(p);
-      break;
-    }
-    case 'vilnius': {
-      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 1.4, 8), m(0xb5503a)); g.add(t);
-      break;
-    }
-    case 'vinted': {
-      const v = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.18, 8, 20), m(0x09b1ba)); g.add(v);
-      break;
-    }
+// flag background that fills a theme portal — 3 horizontal stripes (or solid)
+function themeFlag(theme) {
+  const STRIPES = {
+    berlin: ['#000000', '#FF0000', '#FFCC00'],
+    vilnius: ['#FCD116', '#006633', '#D12630'],
+    amsterdam: ['#AE1C28', '#FFFFFF', '#21468B'],
+  };
+  const LABELS = { berlin: 'B', vilnius: 'V', amsterdam: 'A', vinted: '❤️' };
+  const S = 256; // canvas resolution
+  const canvas = document.createElement('canvas');
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  if (theme === 'vinted') {
+    ctx.fillStyle = '#007782';
+    ctx.fillRect(0, 0, S, S);
+  } else {
+    const cols = STRIPES[theme] || ['#ffffff', '#ffffff', '#ffffff'];
+    const band = S / 3;
+    for (let i = 0; i < 3; i++) { ctx.fillStyle = cols[i]; ctx.fillRect(0, i * band, S, band + 1); }
   }
-  return g;
+  // large bold letter / emoji centered on top of the flag
+  const label = LABELS[theme] || '';
+  if (label) {
+    ctx.font = `bold ${Math.round(S * 0.6)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = S * 0.04;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeText(label, S / 2, S / 2);
+    ctx.fillText(label, S / 2, S / 2);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return new THREE.Mesh(
+    new THREE.CircleGeometry(1.8, 32),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+  );
 }
