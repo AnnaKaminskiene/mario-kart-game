@@ -689,6 +689,14 @@ LANDMARKS.vilnius = [
     cake.position.y -= box.min.y;                       // rest the board flat on the ground
     g.add(cake);
   },
+  // Second Šakotis — 25% smaller than the first, placed elsewhere along the road
+  ({ g }) => {
+    const cake = createSakotis(THREE, { height: 6.5, seed: 7 });
+    cake.scale.setScalar(3.6);                          // 25% smaller than the 4.8 one (~23u tall)
+    const box = new THREE.Box3().setFromObject(cake);
+    cake.position.y -= box.min.y;                       // rest the board flat on the ground
+    g.add(cake);
+  },
 ];
 
 MEDIUM.vilnius = [
