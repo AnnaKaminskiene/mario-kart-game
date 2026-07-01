@@ -32,6 +32,9 @@ export class UI {
       cumulativeList: document.getElementById('cumulative-list'),
       againBtn: document.getElementById('again-btn'),
       changeThemeBtn: document.getElementById('change-theme-btn'),
+      // mute toggles live on both the start and results screens — drive them all
+      muteMusicBtns: Array.from(document.querySelectorAll('.audio-toggle[data-audio="music"]')),
+      muteSfxBtns: Array.from(document.querySelectorAll('.audio-toggle[data-audio="sfx"]')),
     };
     this.selectedTheme = 'berlin';
     this.el.lapTotal.textContent = RACE.totalLaps;
@@ -57,6 +60,29 @@ export class UI {
   onStart(cb) { this.el.startBtn.onclick = cb; }
   onAgain(cb) { this.el.againBtn.onclick = cb; }
   onChangeTheme(cb) { this.el.changeThemeBtn.onclick = cb; }
+  onToggleMusic(cb) { this.el.muteMusicBtns.forEach(b => (b.onclick = cb)); }
+  onToggleSfx(cb) { this.el.muteSfxBtns.forEach(b => (b.onclick = cb)); }
+
+  // render the mute buttons to reflect current state (icon + label + colour).
+  // Both the start- and results-screen copies stay in sync.
+  setMusicButton(muted) {
+    for (const b of this.el.muteMusicBtns) {
+      b.textContent = muted ? '🔇 Music: Off' : '🎵 Music: On';
+      b.classList.toggle('muted', muted);
+      b.setAttribute('aria-pressed', String(muted));
+    }
+  }
+  setSfxButton(muted) {
+    for (const b of this.el.muteSfxBtns) {
+      b.textContent = muted ? '🔇 SFX: Off' : '🔊 SFX: On';
+      b.classList.toggle('muted', muted);
+      b.setAttribute('aria-pressed', String(muted));
+    }
+  }
+  setAudioState(musicMuted, sfxMuted) {
+    this.setMusicButton(musicMuted);
+    this.setSfxButton(sfxMuted);
+  }
 
   showStart() {
     this.el.startScreen.classList.remove('hidden');
